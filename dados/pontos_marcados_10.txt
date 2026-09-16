@@ -1,0 +1,12 @@
+# 5 pontos marcados a mao na coleta que gerou curva_IV_idl_10.txt (16/09/2026),
+# copiados da saida do terminal do IDL; o programa nao grava isto em arquivo.
+# Pixel na imagem 640x480 lida com read_jpeg, order=1: (coluna, linha) = img[linha, coluna]
+# no numpy, SEM inverter o eixo y (medido: so essa convencao reproduz o IDL).
+# Largura do spot 15 (padrao). Fundo por (c)oluna e energia final 308: deduzidos,
+# porque sao os unicos que reproduzem as 139 intensidades do .txt (reproduz_idl.py).
+# energia_eV  coluna  linha
+30   493 123
+80   430 156
+160  401 173
+260  385 184
+290  380 183
