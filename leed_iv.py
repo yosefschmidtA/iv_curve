@@ -9,7 +9,8 @@ Na janela:
   clique direito na imagem    apaga o ponto marcado nesta energia
   <- / ->  (ou roda do mouse) muda de energia
   clique no grafico da curva  pula para aquela energia
-  Salvar spot                 grava spot_N.txt, spot_N_pontos.txt e spot_N.png
+  Salvar spot                 pergunta nome e pasta (sugere spot_N.txt) e grava
+                              <nome>.txt, <nome>_pontos.txt e <nome>.png
   Novo spot                   limpa os pontos; o centro do padrao fica, e 1 clique basta
 
 Com o metodo "fisico" bastam 2 cliques em energias bem separadas (ex.: uma baixa e uma
@@ -51,6 +52,7 @@ class Coleta:
         self.metodo = "fisico"
         self.fundo = "c"
         self.normalizar = self.tem_corrente
+        self.suavizar = False
         self.centro = None
         self.pos, self.inten = {}, {}
         self.salvos = []  # (nome, energias, curva normalizada) dos spots ja gravados
@@ -88,6 +90,8 @@ class Coleta:
         y = np.array([self.inten[e] for e in es], dtype=float)
         if self.normalizar and self.tem_corrente:
             y = y / np.array([self.xml[e]["BeamCurrent"] for e in es])
+        if self.suavizar:
+            y = core.suaviza3(y)
         return es, y
 
     # ---------------------------------------------------------------- janela
@@ -136,6 +140,9 @@ class Coleta:
         self.ck.on_clicked(self._normaliza)
         if not self.tem_corrente:
             self.ck.ax.set_visible(False)
+        self.ck_suave = CheckButtons(self.fig.add_axes([0.30, 0.02, 0.20, 0.06]),
+                                     ["suavizar (media de 3 pontos)"], [self.suavizar])
+        self.ck_suave.on_clicked(self._suaviza)
 
         self.bt_limpa = Button(self.fig.add_axes([0.81, 0.10, 0.08, 0.05]), "Limpar pontos")
         self.bt_limpa.on_clicked(lambda _: self._limpa())
@@ -143,7 +150,7 @@ class Coleta:
         self.bt_novo.on_clicked(lambda _: self._novo())
         self.bt_salva = Button(self.fig.add_axes([0.81, 0.03, 0.17, 0.05]), "Salvar spot",
                                color="#b8e0b8", hovercolor="#8fd18f")
-        self.bt_salva.on_clicked(lambda _: self.salva())
+        self.bt_salva.on_clicked(lambda _: self.salva(escolher=True))
 
         self.fig.canvas.mpl_connect("button_press_event", self._clique)
         self.fig.canvas.mpl_connect("key_press_event", self._tecla)
@@ -205,6 +212,8 @@ class Coleta:
         ax = self.ax_curva
         ax.clear()
         for k, (nome, es_s, y_s) in enumerate(self.salvos):
+            if self.suavizar:
+                y_s = core.suaviza3(y_s)
             ax.plot(es_s, y_s / y_s.max(), color=CORES_SPOTS[k % len(CORES_SPOTS)], lw=1, alpha=0.5, label=nome)
         if self.inten:
             es, y = self.curva_plot()
@@ -213,7 +222,8 @@ class Coleta:
                     "x", color="goldenrod", mew=2)
         ax.axvline(e, color="red", lw=0.8)
         ax.set_xlabel("energia (eV)")
-        ax.set_ylabel("intensidade" + (" / corrente" if self.normalizar and self.tem_corrente else "") + " (norm.)")
+        ax.set_ylabel("intensidade" + (" / corrente" if self.normalizar and self.tem_corrente else "")
+                      + (" suavizada" if self.suavizar else "") + " (norm.)")
         ax.set_xlim(self.energias[0], self.energias[-1])
         if self.salvos or self.inten:
             ax.legend(fontsize=8, loc="upper right")
@@ -282,6 +292,10 @@ class Coleta:
         self.normalizar = self.ck.get_status()[0]
         self.desenha()
 
+    def _suaviza(self, _):
+        self.suavizar = self.ck_suave.get_status()[0]
+        self.desenha()
+
     def _limpa(self):
         self.ancoras = {}
         self.recalcula(), self.desenha()
@@ -294,7 +308,23 @@ class Coleta:
         self.desenha()
 
     # ---------------------------------------------------------------- gravacao
-    def salva(self):
+    def _pergunta_arquivo(self, sugestao):
+        """Caixa "Salvar como" do sistema; devolve o caminho escolhido ou None se cancelar."""
+        titulo, filtro = "Salvar spot", "Curva IV (*.txt)"
+        backend = matplotlib.get_backend().lower()
+        if backend.startswith("qt"):
+            from matplotlib.backends.qt_compat import QtWidgets
+            caminho, _ = QtWidgets.QFileDialog.getSaveFileName(None, titulo, str(sugestao), filtro)
+        elif backend.startswith("tk"):
+            from tkinter import filedialog
+            caminho = filedialog.asksaveasfilename(
+                title=titulo, initialdir=sugestao.parent, initialfile=sugestao.name,
+                defaultextension=".txt", filetypes=[(filtro.split(" (")[0], "*.txt")])
+        else:  # sem janela (Agg, testes): grava com o nome sugerido
+            return sugestao
+        return Path(caminho) if caminho else None
+
+    def salva(self, escolher=False):
         if not self.inten:
             self.mensagem = "Nada para salvar: marque o spot primeiro."
             self.desenha()
@@ -302,7 +332,18 @@ class Coleta:
         n = 1
         while (self.saida / f"spot_{n}.txt").exists():
             n += 1
-        nome = f"spot_{n}"
+        destino = self.saida / f"spot_{n}.txt"
+        if escolher:
+            destino = self._pergunta_arquivo(destino)
+            if destino is None:
+                self.mensagem = "Gravacao cancelada."
+                self.desenha()
+                return None
+            if destino.suffix.lower() != ".txt":
+                destino = destino.with_name(destino.name + ".txt")
+        # A proxima sugestao ja abre na pasta escolhida agora.
+        self.saida = destino.parent
+        nome = destino.stem
         self.saida.mkdir(parents=True, exist_ok=True)
 
         es = self.energias
@@ -321,6 +362,7 @@ class Coleta:
                     + "; ".join(f"{a}: {self.ancoras[a][0]:.0f}, {self.ancoras[a][1]:.0f}" for a in sorted(self.ancoras)) + "\n")
             f.write("# intensidade e suavizada: mesmo calculo do coleta_no_step (IDL), sem perder a ultima energia\n")
             f.write("# normalizada = intensidade / corrente, dividida pelo maximo; normalizada_suave = media de 3 pontos\n")
+            f.write(f"# suavizacao ligada na tela ao salvar: {'sim' if self.suavizar else 'nao'} (o png mostra a curva suavizada se sim)\n")
             f.write("# energia energia_xml coluna linha intensidade suavizada corrente_uA intensidade_por_uA normalizada normalizada_suave\n")
             for k, e in enumerate(es):
                 ex = self.xml[e]["Energy"]
@@ -332,7 +374,7 @@ class Coleta:
             f.write("# energia_eV  coluna  linha\n")
             for a in sorted(self.ancoras):
                 f.write(f"{a} {self.ancoras[a][0]:.0f} {self.ancoras[a][1]:.0f}\n")
-        self._figura_resumo(nome, norm)
+        self._figura_resumo(nome, norm, norm_suave)
 
         if self.metodo == "fisico" and len(self.ancoras) >= 2:
             cc, _, cl, _ = core.ajusta_fisico(self.ancoras)
@@ -342,16 +384,21 @@ class Coleta:
         self.desenha()
         return self.saida / f"{nome}.txt"
 
-    def _figura_resumo(self, nome, norm):
+    def _figura_resumo(self, nome, norm, norm_suave):
         fig, (a1, a2) = plt.subplots(1, 2, figsize=(12, 4.5))
         e0 = min(self.ancoras)
         a1.imshow(core.carrega_cinza(self.imagens[e0]), cmap="gray")
         a1.plot([self.pos[e][0] for e in self.energias], [self.pos[e][1] for e in self.energias], "c-", lw=1)
         a1.plot([self.ancoras[a][0] for a in self.ancoras], [self.ancoras[a][1] for a in self.ancoras], "yx", mew=2)
         a1.set_title(f"{nome}: trajetoria sobre {e0} eV"), a1.set_xticks([]), a1.set_yticks([])
-        a2.plot(self.energias, norm, "k-", lw=1)
+        if self.suavizar:
+            a2.plot(self.energias, norm, "-", color="0.7", lw=1, label="medida")
+            a2.plot(self.energias, norm_suave, "k-", lw=1.2, label="suavizada (3 pontos)")
+            a2.legend(fontsize=8)
+        else:
+            a2.plot(self.energias, norm, "k-", lw=1)
         a2.set_xlabel("energia (eV)"), a2.set_ylabel("intensidade normalizada")
-        a2.set_title(f"metodo {self.metodo}, fundo {self.fundo}")
+        a2.set_title(f"metodo {self.metodo}, fundo {self.fundo}" + (", suavizada" if self.suavizar else ""))
         fig.tight_layout()
         fig.savefig(self.saida / f"{nome}.png", dpi=120)
         plt.close(fig)

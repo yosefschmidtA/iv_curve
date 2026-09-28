@@ -4,5 +4,3 @@ __pycache__/
 # Rotinas da biblioteca do IDL com "Copyright Research Systems, Inc. Unauthorized
 # reproduction prohibited" no cabecalho: nao podem ir para repositorio publico.
 # Ficam na instalacao do IDL da omicron (/home/apancotti/rsi_7.0/idl70/lib).
-idl/profiles_g.pro
-idl/rheed_profile.pro

@@ -1,0 +1,6 @@
+# pontos marcados no leed_iv.py; mesmo formato de pontos_marcados_10.txt
+# energia_eV  coluna  linha
+30 492 123
+46 460 137
+56 449 145
+58 447 146

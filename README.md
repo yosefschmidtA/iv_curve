@@ -24,7 +24,8 @@ python3 leed_iv.py dados/jpg --xml dados/xml --emin 30 --emax 308
 
 - Clique esquerdo no spot marca o centro naquela energia; clique direito apaga.
 - Setas ou roda do mouse mudam a energia; clicar na curva pula para aquela energia.
-- **Salvar spot** grava `spot_N.txt` (curva), `spot_N_pontos.txt` (cliques) e `spot_N.png`.
+- **Salvar spot** abre a caixa "Salvar como" (sugere `spot_N.txt`) e grava `<nome>.txt` (curva),
+  `<nome>_pontos.txt` (cliques) e `<nome>.png`.
 - **Novo spot** limpa os cliques e guarda o centro do padrão: a partir daí 1 clique basta.
 
 As imagens precisam se chamar `<energia>.jpg` ou `<energia>.tiff`; o `.xml` de mesmo nome
